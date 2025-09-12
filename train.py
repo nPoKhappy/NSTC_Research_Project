@@ -10,6 +10,7 @@ import os
 import time
 import yaml
 import argparse
+import matplotlib.pyplot as plt
 
 # 導入自定義模組
 from src import data_utils, engine  # 數據工具和訓練引擎
@@ -145,39 +146,83 @@ def main(config_path):
     # 初始化訓練狀態
     best_val_loss = float('inf')  # 記錄最佳驗證損失
     patience_counter = 0          # 早停計數器
-    
+
+    # 新增：紀錄歷史
+    train_history, val_history, epoch_times = [], [], []
+    cumulative_times = []
+    total_elapsed = 0.0
+
     # 創建模型保存目錄
     os.makedirs('./saved_models/', exist_ok=True)
     model_save_path = os.path.join('./saved_models/', f'{prefix}.pth')
+    results_dir = os.path.join('./results/', prefix)
+    os.makedirs(results_dir, exist_ok=True)
 
     # 開始訓練循環
     for epoch in range(cfg_training['epochs']):
-        # 訓練一個 epoch
+        epoch_start = time.time()
         train_loss = engine.train_one_epoch(
             model, train_loader, optimizer, criterion, device, training_step_fn, config
         )
-        
-        # 在驗證集上評估模型
         val_loss = engine.evaluate(
             model, val_loader, criterion, device, training_step_fn, config
         )
-        
-        print(f'Epoch {epoch+1:03d} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f}')
-        
-        # 早停機制：如果驗證損失改善則保存模型，否則增加計數器
+        epoch_time = time.time() - epoch_start
+        total_elapsed += epoch_time
+        train_history.append(train_loss)
+        val_history.append(val_loss)
+        epoch_times.append(epoch_time)
+        cumulative_times.append(total_elapsed)
+
+        print(f'Epoch {epoch+1:03d} | Train Loss: {train_loss:.6f} | Val Loss: {val_loss:.6f} | Epoch Time: {epoch_time:.2f}s')
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), model_save_path)  # 保存最佳模型
+            torch.save(model.state_dict(), model_save_path)
             print(f'  -> 驗證損失降低，最佳模型已儲存至: {model_save_path}')
-            patience_counter = 0  # 重置早停計數器
+            patience_counter = 0
         else:
-            patience_counter += 1  # 增加早停計數器
-            
-        # 如果連續多個 epoch 沒有改善，則早停
+            patience_counter += 1
         if patience_counter >= cfg_training['patience']:
             print(f"Early stopping at epoch {epoch+1}! (連續 {cfg_training['patience']} 個 epoch 無改善)")
             break
-            
+
+    # 儲存 loss / time CSV 與圖
+    import pandas as pd
+    log_df = pd.DataFrame({
+        'epoch': list(range(1, len(train_history)+1)),
+        'train_loss': train_history,
+        'val_loss': val_history,
+        'epoch_time_sec': epoch_times,
+        'cumulative_time_sec': cumulative_times
+    })
+    log_csv_path = os.path.join(results_dir, 'training_log.csv')
+    log_df.to_csv(log_csv_path, index=False)
+    print(f"訓練日志已保存: {log_csv_path}")
+
+    plt.figure(figsize=(10,6))
+    plt.plot(log_df['epoch'], log_df['train_loss'], label='Train Loss')
+    plt.plot(log_df['epoch'], log_df['val_loss'], label='Val Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training / Validation Loss Curves')
+    plt.legend()
+    plt.grid(alpha=0.3)
+    loss_fig_path = os.path.join(results_dir, 'loss_curve.png')
+    plt.savefig(loss_fig_path, dpi=300)
+    plt.close()
+    print(f"Loss 曲線已保存: {loss_fig_path}")
+
+    plt.figure(figsize=(10,6))
+    plt.plot(log_df['epoch'], log_df['epoch_time_sec'], label='Epoch Time (s)')
+    plt.xlabel('Epoch')
+    plt.ylabel('Seconds')
+    plt.title('Epoch Time per Epoch')
+    plt.grid(alpha=0.3)
+    time_fig_path = os.path.join(results_dir, 'epoch_time_curve.png')
+    plt.savefig(time_fig_path, dpi=300)
+    plt.close()
+    print(f"Epoch Time 曲線已保存: {time_fig_path}")
+
     # 計算並顯示總訓練時間        
     end_time = time.time()
     print(f"\n訓練完成。總耗時: {(end_time - start_time)/60:.2f} 分鐘。")
