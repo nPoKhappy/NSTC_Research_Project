@@ -32,5 +32,5 @@ training:
   learning_rate: 0.001 # Adam 的預設值
   patience: 100 # 早停的耐心值
   loss_weighting:
-    weights: [1.0, 1.0, 1.0, 1.0]
+    weights: [1.0, 0, 0]
   inference_strategy: 'block_replacement'
