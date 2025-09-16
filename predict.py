@@ -187,14 +187,40 @@ def main(config_path):
     df_results.to_csv(results_csv_path, index=False)
     print(f"數值預測結果已保存至: {results_csv_path}")
 
-    # (B) 計算 & 保存 MAE
-    mae_results = {}
-    for i, name in enumerate(y_sv):
-        mae_results[name] = np.mean(np.abs(true_targets_cov[:, i] - predictions_cov[:, i]))
-    df_mae = pd.DataFrame(list(mae_results.items()), columns=["Variable", "MAE"])
-    mae_csv_path = os.path.join(results_dir, 'mae_results.csv')
-    df_mae.to_csv(mae_csv_path, index=False)
-    print(f"MAE 結果已保存至: {mae_csv_path}")
+    # (B) 計算 & 保存指標（MAE / RMSE / R2 / MAPE）
+    y_true = true_targets_cov
+    y_pred = predictions_cov
+    eps = 1e-8
+
+    abs_err = np.abs(y_true - y_pred)
+    sq_err = (y_true - y_pred) ** 2
+
+    mae = abs_err.mean(axis=0)
+    rmse = np.sqrt(sq_err.mean(axis=0))
+    mape = (abs_err / np.maximum(np.abs(y_true), eps)).mean(axis=0) * 100.0
+
+    r2_list = []
+    for i in range(y_true.shape[1]):
+        yt = y_true[:, i]
+        yp = y_pred[:, i]
+        ss_res = np.sum((yt - yp) ** 2)
+        ss_tot = np.sum((yt - yt.mean()) ** 2)
+        if ss_tot == 0:
+            r2 = 1.0 if ss_res == 0 else 0.0
+        else:
+            r2 = 1.0 - ss_res / ss_tot
+        r2_list.append(r2)
+
+    df_metrics = pd.DataFrame({
+        "Variable": y_sv,
+        "MAE": mae,
+        "RMSE": rmse,
+        "R2": r2_list,
+        "MAPE": mape
+    })
+    metrics_csv_path = os.path.join(results_dir, 'metrics_results.csv')
+    df_metrics.to_csv(metrics_csv_path, index=False)
+    print(f"指標結果已保存至: {metrics_csv_path}")
 
     # (C) 繪圖
     for i, name in enumerate(y_sv):
