@@ -47,9 +47,10 @@ def load_data(file_path, datetime_tag='DateTime', index_tag='DateTime', slice_in
         # 沒有日期時間列時，保持預設的數值索引
     
     # 根據 slice_interval 進行採樣（例如每2行取1行）
-    return data[::slice_interval]
+    return data[::slice_interval] # slice_interval = 1 表示不採樣，返回全部數據
 
 def select_date_range(df, start_date, end_date):
+    # 沒有使用到這個函數
     """
     根據開始和結束日期篩選 DataFrame。
     
@@ -92,6 +93,7 @@ def remove_event_periods(df, event_periods=None):
     return df_copy
 
 def shift_time(df, delta_minutes, datetime_tag='DateTime', index_tag='DateTime'):
+    # 沒有使用到這個函數
     """
     對 DataFrame 的時間戳進行平移。
     用於處理數據同步問題或創建時間偏移的數據集。
@@ -112,6 +114,7 @@ def shift_time(df, delta_minutes, datetime_tag='DateTime', index_tag='DateTime')
     return df_copy.set_index(index_tag)
 
 def load_data_safe(file_path, datetime_tag='DateTime', index_tag='DateTime', slice_interval=1):
+    # 沒有使用到這個函數
     """
     安全地載入 CSV 檔案，自動處理是否存在日期時間列的情況。
     這是 load_data 的增強版本，提供更好的錯誤處理和靈活性。
@@ -228,6 +231,7 @@ def inverse_zscore(df_z, mean, std):
 # ==============================================================================
 
 def variable_selection(total_variables):
+    # 通常只會用到 total_variables = 30
     """
     根據總變量數量選擇相應的變量配置。
     支持多種工業過程的變量配置方案。
