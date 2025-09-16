@@ -9,7 +9,6 @@ from tqdm import tqdm
 def step_wise_rolling_training_step(model, batch, criterion, device, loss_fraction=None, qv_count=None):
     """
     策略：執行逐時間步的滾動訓練，並累積每一步的損失。
-    (此版本已更新，不再使用 horizons，並實現真正的滾動邏輯)
     """
     # 1. 從批次中解包數據
     en_input_initial, de_inputs, targets, mask = batch
@@ -21,11 +20,12 @@ def step_wise_rolling_training_step(model, batch, criterion, device, loss_fracti
     mask = mask.to(device)
 
     # 獲取總的預測步數 (例如 30)
-    n_steps = all_future_mvs.shape[1]
+    n_steps = all_future_mvs.shape[1] # 預測的總步數
     
     total_loss = 0
     
     # 2. 逐時間步進行滾動
+    # t 迴路 decoder input 依序輸入 直到 n_steps-1 開始 rolling
     for t in range(n_steps):
         # a. 獲取當前 Encoder 的記憶
         # 注意：在每個時間步，我們都重新對更新後的 current_en_input 進行編碼
@@ -89,7 +89,7 @@ def step_wise_rolling_at_loss_step(model, batch, criterion, device, config):
     mask = mask.to(device)
     
     weights = config['training']['loss_weighting']['weights']
-    num_windows = len(weights)
+    num_windows = len(weights) # weights 是 一个列表，长度即为窗口数量
     total_pred_len = all_future_mvs.shape[1]
     
     # H 是每个窗口/块的大小
@@ -153,89 +153,11 @@ def step_wise_rolling_at_loss_step(model, batch, criterion, device, config):
     return total_loss
 
 
-    """
-    策略：在 PyTorch 中实现与 Keras 版本等价的端到端滾動訓練。
-    梯度會在整個預測鏈條中反向傳播，沒有截斷。
-    """
-    en_input_initial, de_inputs, targets = batch
-    
-    # 將所有數據移動到指定設備
-    current_en_input = en_input_initial.to(device)
-    all_future_mvs = de_inputs.to(device)      # 维度: (B, total_pred_len, mv_features)
-    all_future_targets = targets.to(device) # 维度: (B, total_pred_len, target_features)
-
-    weights = config['training']['loss_weighting']['weights']
-    num_windows = len(weights)
-    total_pred_len = all_future_mvs.shape[1]
-    
-    # H 是每個權重窗口包含的時間步數
-    H = total_pred_len // num_windows
-    if total_pred_len % num_windows != 0:
-        raise ValueError("prediction_length 必須是權重數量 (num_windows) 的整數倍")
-
-    predictions = [] # 用來收集每一步的預測結果
-
-    # --- 关键的滚动预测链条 ---
-    
-    # 第一步预测 (t=0)
-    # 提取第一个时间步的解码器输入
-    de_input_step_0 = all_future_mvs[:, 0, :].unsqueeze(1) 
-    # 进行预测，此时 current_en_input 是真实的初始歷史數據
-    prediction_step_0 = model(current_en_input, de_input_step_0)
-    predictions.append(prediction_step_0)
-
-    # 准备下一次的编码器输入
-    # **关键：这里没有 .detach()**
-    new_features = torch.cat([prediction_step_0, de_input_step_0], dim=2)
-    next_en_input_history = current_en_input[:, 1:, :]
-    current_en_input = torch.cat([next_en_input_history, new_features], dim=1)
-
-    # 后续步骤的预测 (t=1 to total_pred_len - 1)
-    # 我们用一个循环来表示这个链式过程，但重要的是梯度会一直传递
-    for t in range(1, total_pred_len):
-        de_input_step_t = all_future_mvs[:, t, :].unsqueeze(1)
-        
-        # 使用上一步合成的 current_en_input 进行预测
-        prediction_step_t = model(current_en_input, de_input_step_t)
-        predictions.append(prediction_step_t)
-        
-        # 如果不是最后一步，则继续准备下一次的输入
-        if t < total_pred_len - 1:
-            # **关键：同样没有 .detach()**
-            new_features = torch.cat([prediction_step_t, de_input_step_t], dim=2)
-            next_en_input_history = current_en_input[:, 1:, :]
-            current_en_input = torch.cat([next_en_input_history, new_features], dim=1)
-
-    # --- 计算加权总损失 ---
-
-    # 将所有单步预测结果合并成一个大的张量
-    all_predictions = torch.cat(predictions, dim=1) # 维度: (B, total_pred_len, target_features)
-    
-    total_loss = 0
-    loss_weights = torch.tensor(weights, device=device)
-    loss_weights = loss_weights / torch.sum(loss_weights) # 权重归一化
-
-    # 按窗口计算损失
-    for i in range(num_windows):
-        start_idx = i * H
-        end_idx = (i + 1) * H
-        
-        # 提取对应窗口的预测和目标
-        window_predictions = all_predictions[:, start_idx:end_idx, :]
-        window_targets = all_future_targets[:, start_idx:end_idx, :]
-        window_mask = mask[:, start_idx:end_idx, :]
-        abs_err = torch.abs(window_predictions - window_targets) * window_mask
-        denom = window_mask.sum() + 1e-8
-        l_i = abs_err.sum() / denom
-        
-        # 乘以权重并累加
-        total_loss += loss_weights[i] * l_i
-            
-    return total_loss
 
 
 
 def train_one_epoch(model, dataloader, optimizer, criterion, device, training_step_fn, config=None, loss_fraction=None):
+    """訓練函數"""
     model.train()
     total_loss = 0
     qv_count = config['data']['num_qv'] if config and 'data' in config and 'num_qv' in config['data'] else None
@@ -251,6 +173,7 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device, training_st
     return total_loss / len(dataloader)
 
 def evaluate(model, dataloader, criterion, device, training_step_fn, config=None, loss_fraction=None):
+    """評估函數"""
     model.eval()
     total_loss = 0
     qv_count = config['data']['num_qv'] if config and 'data' in config and 'num_qv' in config['data'] else None
