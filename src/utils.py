@@ -1,4 +1,4 @@
-# src/utils.py (已修改為無 horizon 的版本)
+# src/utils.py 完全沒有用到這個檔案
 
 import torch
 import numpy as np
@@ -9,12 +9,14 @@ import os
 from tqdm import tqdm
 
 def generate_results(model, loader, device, config, mean, std, y_tags, de_mv_tags, prefix, set_name):
+    # 沒有用到此參數
+    """生成評估結果(測試階段)"""
     print(f"開始評估 {set_name}...")
     model.eval()
     
     all_predictions_list = []
     all_targets_list = []
-
+    # 不用梯度計算
     with torch.no_grad():
         for en_input, de_inputs, targets in tqdm(loader, desc=f"Predicting on {set_name} set"):
             en_input = en_input.to(device)
@@ -67,6 +69,7 @@ def generate_results(model, loader, device, config, mean, std, y_tags, de_mv_tag
 
 # one_shot_forecast 函數保持不變，它已經是我們需要的形式了
 def one_shot_forecast(model, encoder_input_initial, decoder_inputs_future, device):
+    # 沒有使用函數
     model.eval()
     encoder_input = encoder_input_initial.to(device)
     decoder_inputs = decoder_inputs_future.to(device)
