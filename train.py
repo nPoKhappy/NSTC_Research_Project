@@ -2,20 +2,22 @@
 # 訓練腳本 - 支持多種模型和訓練策略的時間序列預測模型訓練
 # ==============================================================================
 
-import torch
-import torch.optim as optim
-import torch.nn as nn
-from torch.utils.data import DataLoader
-import os
-import time
-import yaml
 import argparse
 import matplotlib.pyplot as plt
+import os
+import pandas as pd
+import time
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+import yaml
 
 # 導入自定義模組
 from src import data_utils, engine  # 數據工具和訓練引擎
 from src.dataset import MultiStepS2SDataset  # 序列到序列數據集類
 from src.models import get_model  # 模型工廠，支持多種模型架構
+
 
 def main(config_path):
     """
@@ -52,7 +54,6 @@ def main(config_path):
     except (KeyError, ValueError) as e:
         print(f"注意：數據中沒有 DateTime 列，使用預設索引載入: {e}")
         # 如果沒有 DateTime 列，直接讀取 CSV
-        import pandas as pd
         df_raw = pd.read_csv(os.path.join(cfg_data['path'], cfg_data['filename']))
         print("成功載入訓練數據（使用預設索引）")
     
@@ -187,7 +188,6 @@ def main(config_path):
             break
 
     # 儲存 loss / time CSV 與圖
-    import pandas as pd
     log_df = pd.DataFrame({
         'epoch': list(range(1, len(train_history)+1)),
         'train_loss': train_history,

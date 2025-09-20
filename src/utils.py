@@ -1,11 +1,11 @@
 # src/utils.py 完全沒有用到這個檔案
 
-import torch
-import numpy as np
-import pandas as pd
 from math import sqrt
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error, mean_absolute_percentage_error
+import numpy as np
 import os
+import pandas as pd
+from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, mean_squared_error, r2_score
+import torch
 from tqdm import tqdm
 
 def generate_results(model, loader, device, config, mean, std, y_tags, de_mv_tags, prefix, set_name):
